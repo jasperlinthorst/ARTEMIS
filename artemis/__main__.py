@@ -3,116 +3,126 @@ import re
 import sys
 import pysam
 import argparse
+import os
+
 from pybedtools import BedTool
 import logging
 
 parser = argparse.ArgumentParser(prog="artemis", usage="artemis -h", description="Run the artemis pipeline", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+handler = logging.StreamHandler()
+handler.terminator = ""
 
-logging.basicConfig(level=logging.INFO, format='%(message)s', stream=sys.stderr)
+logging.basicConfig(level=logging.INFO, format='%(message)s', handlers=[handler])
 
 hg={}
 def loadhg(args):
-    logging.info("\nLoading human reference genome")
 
-    if args.reference.name.endswith(".gz"):
-        fopen=gzip.open
+    logging.info("\nLoading genome %s... "%args.reference.name)
+
+    f=args.reference.read()
+
+    if f[:2] == b'\x1f\x8b': #gzip magic number
+        logging.info('Reading gzipped genome file...')
+        genome=gzip.decompress(f).decode('utf-8')
     else:
-        fopen=open
-    
-    with fopen(args.reference.name, "rt") as genome_file:
-        seq,chrom="",None
-        for line in genome_file:
+        genome=f.decode('utf-8')
+
+    nseq=0
+
+    seq=""
+    for line in genome.split("\n"):
+        if len(line)>0:
             if line[0]=='>':
-                if seq!="" and chrom!=None:
-                    hg[chrom]=seq
-                p=re.compile("(.*) Homo sapiens chromosome (\d{1,2}|X|Y), GRCh38.p14 Primary Assembly")
-                match=p.search(line)
-                if match!=None: #actual primary assembly
-                    ctgname=match.group(1)
-                    chrom=match.group(2)
-                else:
-                    if line.find('mitochondrion')!=-1:
-                        chrom='M'
-                    else:
-                        chrom=None  
+                if seq!="":
+                    hg[ctgname]=seq
+                    nseq+=len(seq)
+                ctgname=line[1:].split()[0]
+
                 seq=""
             else:
                 seq+=line[:-1]
-    if seq!="" and chrom!=None:
-        hg[chrom]=seq
+
+    if seq!="":
+        hg[ctgname]=seq
+        nseq+=len(seq)
+
+    logging.info(f" done ({nseq}bp).\n")
 
 revcomptable = str.maketrans("acgtACGTRY","tgcaTGCAYR")
 def revcomp(s):
     return s.translate(revcomptable)[::-1]
 
-def intersect_seeds_with_clinvar(args):
-    
+def intersect_seeds_with_vcf(args):    
+    pamsites = []
+    seedsites= []
 
-    # Step 3: Create a set of positions (chrom, start, end) from the VCF file
-    vcf_positions = set()
-
-    if args.kg!=None:
-        logging.info("Load 1000 genomes data")
-        kgvcf = pysam.VariantFile(args.kg.name)
-        for record in kgvcf.fetch():
-            # Collect positions where AF is between 0.01 and 0.99
-            if "AF" in record.info:
-                af_values = record.info["AF"]
-                if any(0.01 <= af <= 0.99 for af in af_values): #TODO: parameterize this
-                    vcf_positions.add((record.chrom, record.pos - 1, record.pos))  # VCF is 1-based, BED is 0-based
-
-    # Step 4: Perform the intersection to filter out BED intervals that overlap with VCF positions
-    no_overlap_bed = []
-    # for interval in bed:
-
-    logging.info("Scan PAM sites in human genome")
+    logging.info("Scanning for PAM sites in genome... ")
     p=re.compile("(TTT[A,C,G])|([C,G,T]AAA)")
     for chrom in hg.keys():
+        logging.info(f"{chrom} ")
         for m in p.finditer(hg[chrom]):
             if chrom=='MT':
                 chrom='M'
             o='-' if m.groups()[0]==None else '+'
             chrom, start, end, orient = chrom, m.start(), m.end(), o
 
-            # chrom, start, end, orient = interval.chrom, interval.start, interval.end, interval.name
-            # Check if the interval overlaps with any of the VCF positions
-            if not any(chrom == vcf_chrom and start < vcf_end and end > vcf_start
-                    for vcf_chrom, vcf_start, vcf_end in vcf_positions):
-                # if no overlap, determine the seed region
-                if orient == "+":
-                    no_overlap_bed.append((chrom, end, end + args.seedsize, orient,'test'))
-                else:
-                    no_overlap_bed.append((chrom, start-args.seedsize, start, orient,'test'))
+            pamsites.append((chrom, start, end, orient))
     
-    no_overlap_bed_tool = BedTool(no_overlap_bed)
+    logging.info(f"done ({len(pamsites)} pamsites).\n")
 
-    logging.info("Sort and merge %d PAM associated seed sites"%len(no_overlap_bed))
-    merged_bed_tool = no_overlap_bed_tool.sort().merge()
+    pams = BedTool(pamsites)
+    pams.saveas("allpamsites.bed")
 
-    merged_bed_tool.saveas("seedsites.bed")
+    if args.kg!=None:
+        logging.info("Intersecting PAM sites with 1000 genomes data... ")
+        kg=BedTool(open(args.kg.name))
+        pams = pams.intersect(kg,  wa=True, wb=False, v=True)
+        pams.saveas("filtpamsites.bed")
+        logging.info("done.\n")
 
-    
+    logging.info("Sorting and merging %d PAM associated seed sites... "%len(pamsites))
+    for p in pams:
+        chrom, start, end, orient = p
+        start, end = int(start), int(end)
+        if orient == "+":
+            seedsites.append((chrom, end, end + args.seedsize, orient))
+        else:
+            seedsites.append((chrom, start-args.seedsize, start, orient))
+    seeds = BedTool(seedsites)
+    seeds = seeds.sort().merge()
+    logging.info("done.\n")
 
-    # clinvarstr="".join(gzip.open(args.clinvar.name,"rt").readlines())
+    logging.info("Storing seed regions... ")
+    seeds.saveas("seedsites.bed")
+    logging.info("done.\n")
 
-    clinvarvcf = BedTool(args.clinvar.name)
-    
-    #clinvar_bed = BedTool([(rec.chrom, rec.pos - 1, rec.pos) for rec in pysam.VariantFile(args.clinvar).fetch() if "CLNSIG" in rec.info and "Pathogenic" in rec.info["CLNSIG"] and 'CLNVC' in rec.info and rec.info["CLNVC"] == 'single_nucleotide_variant'])
+    clinvarvcf=open(args.vcf.name).read()
 
-    intersected_bed = clinvarvcf.intersect(merged_bed_tool, wa=True, wb=False, u=True)
+    logging.info("Intersecting seed regions with input VCF file... ")
+    inputvcf=BedTool(clinvarvcf, from_string=True)
+    intersected_bed = inputvcf.intersect(seeds, wa=True, wb=False, u=True)
+    logging.info("done.\n")
 
-    intersected_bed.saveas("clinvar_intersect.bed")
+    logging.info("Writing all CAS12 seed intersecting variants to new VCF file with annotations... ")
 
-    
-    logging.info("Writing CRISPR gRNA annotated clinvar VCF file for intersecting clinvar pathogenic SNVs")
+    header=""
+    num_input_snvs=0
+    for l in clinvarvcf.split("\n"):
+        if len(l)>0:
+            if l[0]!='#':
+                num_input_snvs+=1
+            else:
+                header+=l+"\n"
 
-    with pysam.VariantFile(args.clinvar.name, "r") as clinvarvcf:
-        header=str(clinvarvcf.header)
+    logging.info("Number of SNVs in input VCF: %d\n"%num_input_snvs)
 
-    intersected_bed.saveas("clinvar_intersection.vcf", trackline=header)
+    intersected_bed.saveas(".intersection.vcf", trackline=header)
 
-    # Write all pathogenic SNV variants in clinvar that intersect with a CAS12 seed to a new VCF file with specific annotations
-    with pysam.VariantFile("clinvar_intersection.vcf") as vcfreader:
+    if args.outputfile == None:
+        args.outputfile = sys.stdout
+
+    # Write all CAS12 intersecting variants to a new annotated VCF file
+    with pysam.VariantFile(".intersection.vcf") as vcfreader:
 
         posPAM =  ["TTTC", "TTTA", "TTTG"]
         negPAM  = ["CAAA", "TAAA", "GAAA"]
@@ -126,23 +136,19 @@ def intersect_seeds_with_clinvar(args):
         vcfreader.header.info.add('CRISPR_alt_target_sequence', 1, 'String', 'CRISPR target sequence to address the alternative (pathogenic) allele.')
         vcfreader.header.info.add('STRAND', 1, 'String', 'Whether PAM site is found on the positive (+) or negative (-) strand.')
         
-        with pysam.VariantFile(sys.stdout,'w',header=vcfreader.header) as vcfwriter:
+        with pysam.VariantFile(args.outputfile,'w',header=vcfreader.header) as vcfwriter:
             
             for rec in vcfreader:
                 
-                if "CLNSIG" in rec.info and "Pathogenic" in rec.info["CLNSIG"]: #Only write pathogenic variants
-                    if 'CLNVC' in rec.info and rec.info["CLNVC"]=='single_nucleotide_variant': #Only write SNVs
-                        # chrom, pos = rec.chrom, rec.pos - 1  # VCF is 1-based, BED is 0-based
-                        # for interval in merged_bed_tool:
-                            # if chrom == interval.chrom and pos >= interval.start and pos < interval.end:
+                if rec.ref!=None and rec.alts!=None and rec.pos!=None and rec.chrom!=None:
+
+                    if len(rec.ref) == 1 and len(rec.alts)==1 and len(rec.alts[0]) == 1: #only SNVs!
 
                         chrom=rec.chrom
                         chrom_nochr=chrom.replace('chr','').replace('M','MT')
-                        gene=rec.info['GENEINFO']
                         pos=rec.pos
                         ref=rec.ref
                         alt=rec.alts[0]
-                        #af=rec.info['AF_EXAC']
                         
                         site=hg[chrom_nochr][int(pos)-w-1:int(pos)+w]
                         r=hg[chrom_nochr][int(pos)-1]
@@ -182,19 +188,25 @@ def intersect_seeds_with_clinvar(args):
                         rec.info['STRAND']=strandorientation
                         
                         vcfwriter.write(rec)
+                        n+=1
+    logging.info("done.\n")
+
+    logging.info("%.3f%% variants in the inputvcf (%d/%d) intersect a CAS12 seed site.\n"%(float(n/num_input_snvs)*100,n,num_input_snvs))
+    os.remove(".intersection.vcf")
 
 def main():
-    parser.add_argument(dest="clinvar", type=argparse.FileType('r'), help="Path to the clinvar vcf file")
-    parser.add_argument(dest="reference", type=argparse.FileType('r'), help="Path to the human reference genome file")
+    parser.add_argument(dest="reference", type=argparse.FileType('rb'), help="Path to the human reference genome file")
+    parser.add_argument(dest="vcf", type=argparse.FileType('r'), help="Path to the a vcf file, e.g. a clinvar vcf file")
 
-    parser.add_argument("--1kg", dest="kg", type=argparse.FileType('r'), help="Path to 1000 genomes vcf file", required=False, default=None)
+    parser.add_argument("--exclude", dest="kg", type=argparse.FileType('r'), help="Exclude PAMs that intersect with variants in this vcf (e.g. 1000 genomes data)", required=False, default=None)
+    parser.add_argument("-o", dest="outputfile", type=argparse.FileType('w'), help="Where to write annotated output vcf file (default: stdout)", required=False, default=None)
     parser.add_argument("--seedsize", type=int, default=5, help="Specify the size of the seed region")
 
     args = parser.parse_args()
 
     loadhg(args)
 
-    intersect_seeds_with_clinvar(args)
+    intersect_seeds_with_vcf(args)
 
 if __name__ == '__main__':
     main()
