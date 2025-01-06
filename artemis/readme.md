@@ -34,17 +34,18 @@ or use pip
 
 ```sh
 
-python3 -m pip install https://github.com/jasperlinthorst/artemis.git --user
+python3 -m pip install git+https://github.com/jasperlinthorst/ARTEMIS --user
 
 ```
 
 ## Download
 For published use-case download GRCh38, clinvar and 1000 genomes data:
 
-- wget https://ftp.ensembl.org/pub/release-113/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz
-- wget https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz
-- wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20181203_biallelic_SNV/ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz
-
+```sh
+wget https://ftp.ensembl.org/pub/release-113/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz
+wget https://ftp.ncbi.nlm.nih.gov/pub/clinvar/vcf_GRCh38/clinvar.vcf.gz
+wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_project/release/20181203_biallelic_SNV/ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz
+```
 
 ## Usage
 
@@ -74,14 +75,22 @@ artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz clinvar.vcf.gz > clinv
 NOTE, the above will intersect all ~60 million PAM sites in the human genome with all variants in clinvar and thus wil take long to run and uses large amounts of memory. Better to subset the data, which can be done from the commandline directly. Given that files are indexed using samtools/bcftools, intersect PAMs on chromosome 22 with pathogenic SNVs on chromosome 22 in clinvar:
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG ~ "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) -o clinvar.cas12.chr22.pathogenic.snv.vcf
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) -o clinvar.cas12.chr22.pathogenic.snv.vcf
 ```
 
 To exclude PAM sites that are potentially interrupted by common variants:
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG ~ "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --excl <(bcftools view -i 'INFO/AF>=0.01 & INFO/AF<=0.99' ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz chr22 | sed -s 's/chr//1') -o clinvar.cas12.chr22.pathogenic.snv.excl1kg.maf1p.vcf
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --excl <(bcftools view -i 'INFO/AF>=0.01 & INFO/AF<=0.99' ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz chr22 | sed -s 's/chr//1') -o clinvar.cas12.chr22.pathogenic.snv.excl1kg.maf1p.vcf
 ```
+
+To use different seed size definitions and match PAMs for other CAS proteins use --seedsize and --pamregex arguments. E.g to screen for CAS9 with a seed size definition
+
+```sh
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 8 --pamregex "((?=(.GG)|?=(CC.)))" -o clinvar.cas9.chr22.pathogenic.snv.vcf
+
+```
+
 
 The resulting vcf file can be imported into genome browsers like IGV, contains all CAS12 targetable variants and the following additional annotations with respect to CRISPR gRNA spacer sequence and the nearest PAM site:
 

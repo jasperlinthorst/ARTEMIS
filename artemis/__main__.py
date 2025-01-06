@@ -39,7 +39,7 @@ def loadhg(args):
 
                 seq=""
             else:
-                seq+=line[:-1]
+                seq+=line[:-1]#.upper() #consider uppercasing the genome to include pams in softmasked regions...
 
     if seq!="":
         hg[ctgname]=seq
@@ -56,16 +56,18 @@ def intersect_seeds_with_vcf(args):
     seedsites= []
 
     logging.info("Scanning for PAM sites in genome... ")
-    p=re.compile("(TTT[A,C,G])|([C,G,T]AAA)")
+    p=re.compile(args.pamregex)
     for chrom in hg.keys():
         logging.info(f"{chrom} ")
         for m in p.finditer(hg[chrom]):
-            if chrom=='MT':
-                chrom='M'
-            o='-' if m.groups()[0]==None else '+'
-            chrom, start, end, orient = chrom, m.start(), m.end(), o
 
-            pamsites.append((chrom, start, end, orient))
+            o='-' if m.groups()[0]==None else '+'
+            start=m.start()
+            end=m.start() + len(m.group(1)) if m.group(1)!=None else m.start()+len(m.group(2))
+            
+            # print(m.groups(), start, end)
+            # print(s[start:end])
+            pamsites.append((chrom, start, end, o))
     
     logging.info(f"done ({len(pamsites)} pamsites).\n")
 
@@ -83,10 +85,14 @@ def intersect_seeds_with_vcf(args):
     for p in pams:
         chrom, start, end, orient = p
         start, end = int(start), int(end)
-        if orient == "+":
-            seedsites.append((chrom, end, end + args.seedsize, orient))
+        if start > args.seedsize and end < len(hg[chrom]) - args.seedsize:
+            if orient == "+":
+                seedsites.append((chrom, end, end + args.seedsize, orient))
+            else:
+                seedsites.append((chrom, start-args.seedsize, start, orient))
         else:
-            seedsites.append((chrom, start-args.seedsize, start, orient))
+            logging.info(f"Skipping PAM site at {chrom}:{start}-{end} because it is too close to the edge of the chromosome.\n")
+    
     seeds = BedTool(seedsites)
     seeds = seeds.sort().merge()
     logging.info("done.\n")
@@ -113,8 +119,6 @@ def intersect_seeds_with_vcf(args):
             else:
                 header+=l+"\n"
 
-    logging.info("Number of SNVs in input VCF: %d\n"%num_input_snvs)
-
     intersected_bed.saveas(".intersection.vcf", trackline=header)
 
     if args.outputfile == None:
@@ -122,6 +126,7 @@ def intersect_seeds_with_vcf(args):
 
     # Write all CAS12 intersecting variants to a new annotated VCF file
     with pysam.VariantFile(".intersection.vcf") as vcfreader:
+
 
         posPAM =  ["TTTC", "TTTA", "TTTG"]
         negPAM  = ["CAAA", "TAAA", "GAAA"]
@@ -154,6 +159,13 @@ def intersect_seeds_with_vcf(args):
                         downstream=hg[chrom_nochr][int(pos)-w:int(pos)-1]
                         upstream=hg[chrom_nochr][int(pos):int(pos)+w-1]
                         
+                        # p=re.compile(args.pamregex)
+                        # for m in p.finditer(downstream):
+                        #     o='-' if m.groups()[0]==None else '+'
+                        #     start, end, orient = m.start(), m.end(), o
+                            # pamsites.append((chrom, start, end, orient))
+
+
                         rpclosest=100
                         for pam in posPAM:
                             p=downstream.find(pam)
@@ -200,7 +212,8 @@ def main():
     parser.add_argument("--exclude", dest="kg", type=argparse.FileType('r'), help="Exclude PAMs that intersect with variants in this vcf (e.g. 1000 genomes data)", required=False, default=None)
     parser.add_argument("-o", dest="outputfile", type=argparse.FileType('w'), help="Where to write annotated output vcf file (default: stdout)", required=False, default=None)
     parser.add_argument("--seedsize", type=int, default=5, help="Specify the size of the seed region")
-
+    parser.add_argument("--pamregex", type=str, default='(?=(TTT[ACG]))|(?=([CGT]AAA))', help="Regular expression to search for PAM sites in the genome, default for CAS12a: first group should match forward strand, second group the reverse complement")
+    
     args = parser.parse_args()
 
     loadhg(args)
