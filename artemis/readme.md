@@ -87,7 +87,7 @@ artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <
 To use different seed size definitions and match PAMs for other CAS proteins use --seedsize and --pamregex arguments. E.g to screen for CAS9 with a seed size definition
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 8 --pamregex "((?=(.GG)|?=(CC.)))" -o clinvar.cas9.chr22.pathogenic.snv.vcf
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 8 --pamregex "(?=([ACT]GG))|(?=(CC[AGT]))" -o clinvar.cas9.chr22.pathogenic.snv.vcf
 
 ```
 

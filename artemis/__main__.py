@@ -149,7 +149,7 @@ def intersect_seeds_with_vcf(args):
                     if len(rec.ref) == 1 and len(rec.alts)==1 and len(rec.alts[0]) == 1: #only SNVs!
 
                         chrom=rec.chrom
-                        chrom_nochr=chrom.replace('chr','').replace('M','MT')
+                        chrom_nochr=chrom.replace('chr','')
                         pos=rec.pos
                         ref=rec.ref
                         alt=rec.alts[0]
@@ -159,6 +159,8 @@ def intersect_seeds_with_vcf(args):
                         downstream=hg[chrom_nochr][int(pos)-w:int(pos)-1]
                         upstream=hg[chrom_nochr][int(pos):int(pos)+w-1]
                         
+                        #TODO: use regex to find PAM sites!
+
                         # p=re.compile(args.pamregex)
                         # for m in p.finditer(downstream):
                         #     o='-' if m.groups()[0]==None else '+'
