@@ -22,7 +22,6 @@ def loadhg(args):
     f=args.reference.read()
 
     if f[:2] == b'\x1f\x8b': #gzip magic number
-        logging.info('Reading gzipped genome file...')
         genome=gzip.decompress(f).decode('utf-8')
     else:
         genome=f.decode('utf-8')
@@ -74,13 +73,13 @@ def intersect_seeds_with_vcf(args):
     pams.saveas("allpamsites.bed")
 
     if args.kg!=None:
-        logging.info("Intersecting PAM sites with 1000 genomes data... ")
-        kg=BedTool(open(args.kg.name))
+        logging.info("Intersecting PAM sites with exclusion vcf... ")
+        kg=BedTool(open(args.kg.name).read(),from_string=True)
         pams = pams.intersect(kg,  wa=True, wb=False, v=True)
         pams.saveas("filtpamsites.bed")
         logging.info("done.\n")
-
-    logging.info("Sorting and merging %d PAM associated seed sites... "%len(pamsites))
+    
+    logging.info("Sorting and merging %d PAM associated seed sites... "%len(pams))
     for p in pams:
         chrom, start, end, orient = p
         start, end = int(start), int(end)

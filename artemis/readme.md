@@ -80,13 +80,15 @@ artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <
 To exclude PAM sites that are potentially interrupted by common variants:
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG ~ "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --excl <(bcftools view -i 'INFO/AF>=0.01 & INFO/AF<=0.99' ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz 22 | sed -s 's/chr//1')-o clinvar.cas12.chr22.pathogenic.snv.excl1kg.maf1p.vcf
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG ~ "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --excl <(bcftools view -i 'INFO/AF>=0.01 & INFO/AF<=0.99' ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz chr22 | sed -s 's/chr//1') -o clinvar.cas12.chr22.pathogenic.snv.excl1kg.maf1p.vcf
 ```
+
+The resulting vcf file can be imported into genome browsers like IGV, contains all CAS12 targetable variants and the following additional annotations with respect to CRISPR gRNA spacer sequence and the nearest PAM site:
+
+- SNP_position: Position of SNP relative to PAM site
+- CRISPR_ref_target_sequence: CRISPR target sequence to address the reference (WT) allele
+- CRISPR_alt_target_sequence: CRISPR target sequence to address the alternative (pathogenic) allele.'
+- STRAND: Whether PAM site is found on the positive (+) or negative (-) strand.'
 
 ## Contributing
 Contributions are welcome! Please open an issue or submit a pull request on GitHub.
-
-## Contact
-Author: Jasper Linthorst
-Email: jasper.linthorst@gmail.com
-
