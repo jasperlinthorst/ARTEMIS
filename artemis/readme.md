@@ -72,7 +72,7 @@ NOTE, make sure vcf and reference genomes use the same version and contig annota
 artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz clinvar.vcf.gz > clinvar.cas12.annotated.vcf
 ```
 
-NOTE, the above will intersect all ~60 million PAM sites in the human genome with all variants in clinvar and thus wil take long to run and uses large amounts of memory. Better to subset the data, which can be done from the commandline directly. Given that files are indexed using samtools/bcftools, intersect PAMs on chromosome 22 with pathogenic SNVs on chromosome 22 in clinvar:
+NOTE, the above will intersect all ~60 million PAM sites in the human genome with all variants in clinvar and thus wil take long to run and uses large amounts of memory. Better to subset the data, which can be done from the commandline directly. If the reference is bgzipped and indexed using samtools, and vcf files are index using bcftools, we can intersect PAMs on chromosome 22 with pathogenic SNVs on chromosome 22 in clinvar like this:
 
 ```sh
 artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) -o clinvar.cas12.chr22.pathogenic.snv.vcf

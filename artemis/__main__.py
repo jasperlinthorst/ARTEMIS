@@ -39,7 +39,7 @@ def loadhg(args):
 
                 seq=""
             else:
-                seq+=line[:-1]#.upper() #consider uppercasing the genome to include pams in softmasked regions...
+                seq+=line#.upper() #consider uppercasing the genome to include pams in softmasked regions...
 
     if seq!="":
         hg[ctgname]=seq
@@ -65,8 +65,14 @@ def intersect_seeds_with_vcf(args):
             start=m.start()
             end=m.start() + len(m.group(1)) if m.group(1)!=None else m.start()+len(m.group(2))
             
+            # print(chrom,start,end,hg[chrom][start:end])
             # print(m.groups(), start, end)
-            # print(s[start:end])
+            
+            # if o=='+':
+            #     assert(hg[chrom][start:end] in ["TTTC", "TTTA", "TTTG"])
+            # else:
+            #     assert(hg[chrom][start:end] in ["CAAA", "TAAA", "GAAA"])
+            
             pamsites.append((chrom, start, end, o))
     
     logging.info(f"done ({len(pamsites)} pamsites).\n")
