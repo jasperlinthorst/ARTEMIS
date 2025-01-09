@@ -53,18 +53,19 @@ wget ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000_genomes_proj
 ./artemis --help
 ```
 
-To run the Artemis pipeline, use the following command:
+To run the Artemis pipeline, use the following command:  
 
-Arguments
-reference_genome: Path to the human reference genome file (required)
-vcf_file: Path to the VCF file, e.g., a ClinVar VCF file (required)
+### Arguments
+reference_genome: Path to the human reference genome file (required)  
+vcf_file: Path to the VCF file, e.g., a ClinVar VCF file (required)  
 
-Options
---exclude <kg>: Exclude PAMs that intersect with variants in this VCF (e.g., 1000 genomes data)
--o <outputfile>: Where to write the annotated output VCF file (default: stdout)
---seedsize <size>: Specify the size of the seed region (default: 5)
+### Options
+--exclude <kg>: Exclude PAMs that intersect with variants in this VCF (e.g., 1000 genomes data)  
+-o <outputfile>: Where to write the annotated output VCF file (default: stdout)  
+--seedsize <size>: Specify the size of the seed region (default: 5)  
+--pamregex <regex>: Specify regular expression that matches PAM sites, first group for positive strand and second group for negative strand matches, (default Cas12a: "(?=(TTT[ACG]))|(?=([CGT]AAA))")  
 
-NOTE, make sure vcf and reference genomes use the same version and contig annotations. 
+NOTE, make sure vcf and reference genomes use the same version and contig annotations.  
 
 ## Example
 
@@ -97,6 +98,8 @@ or for Cas12b
 artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 6 --pamregex "(?=(TT[CT]))|(?=([GA]AA))" -o clinvar.cas12b.chr22.pathogenic.snv.vcf
 
 ```
+
+etc.
 
 The resulting vcf file can be imported into genome browsers like IGV, contains all targetable variants and the following additional annotations with respect to CRISPR gRNA spacer sequence and the nearest PAM site:
 
