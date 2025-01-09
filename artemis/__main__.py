@@ -133,12 +133,8 @@ def intersect_seeds_with_vcf(args):
     # Write all CAS12 intersecting variants to a new annotated VCF file
     with pysam.VariantFile(".intersection.vcf") as vcfreader:
 
-
-        posPAM =  ["TTTC", "TTTA", "TTTG"]
-        negPAM  = ["CAAA", "TAAA", "GAAA"]
-        pamsize=4
-        w=args.seedsize+pamsize
-
+        gRNAsize=25
+        w=gRNAsize #should be max seedsize + PAMsize, but theoretically regex matches could be variably sized, so now we scan more than we need, but we don't need an additional parameter
         n=0
 
         vcfreader.header.info.add('SNP_position', 1, 'String', 'Position of SNP relative to PAM site')
@@ -155,56 +151,49 @@ def intersect_seeds_with_vcf(args):
                     if len(rec.ref) == 1 and len(rec.alts)==1 and len(rec.alts[0]) == 1: #only SNVs!
 
                         chrom=rec.chrom
-                        chrom_nochr=chrom.replace('chr','')
                         pos=rec.pos
                         ref=rec.ref
                         alt=rec.alts[0]
+                                                
+                        region=hg[chrom][int(pos)-w:int(pos)+w-1] #determine w or use valid default
+                        p=re.compile(args.pamregex)
                         
-                        site=hg[chrom_nochr][int(pos)-w-1:int(pos)+w]
-                        r=hg[chrom_nochr][int(pos)-1]
-                        downstream=hg[chrom_nochr][int(pos)-w:int(pos)-1]
-                        upstream=hg[chrom_nochr][int(pos):int(pos)+w-1]
-                        
-                        #TODO: use regex to find PAM sites!
+                        rpclosest=None
+                        pamclosest=None
+                        for m in p.finditer(region):
 
-                        # p=re.compile(args.pamregex)
-                        # for m in p.finditer(downstream):
-                        #     o='-' if m.groups()[0]==None else '+'
-                        #     start, end, orient = m.start(), m.end(), o
-                            # pamsites.append((chrom, start, end, orient))
+                            if m.groups()[0]!=None: #PAM on positive strand
+                                pam=m.group(1)
+                                strandorientation='+'
+                                pamsize=len(pam)
+                                if m.start()+len(pam)<w: #valid because its upstream of the variant
+                                    rp=w-m.start() #position of the variant relative to the start of the PAM site
+                                else: continue #pams that intersect the SNP are not valid (?)
+                            else: # PAM on negative strand
+                                pam=m.group(2)
+                                strandorientation='-'
+                                if m.start()>=w: #valid because its downstream of the variant
+                                    rp=m.start()+1+len(pam)-w #position of the variant relative to the start of the PAM site
+                                else: continue #pams that intersect the SNP are not valid (?)
+                            if rpclosest==None or rp<rpclosest:
+                                rpclosest=rp
+                                pamclosest=pam
+                                orientation=strandorientation
+                                if orientation=='+':
+                                    pamstart=int(pos)-rpclosest
+                                    reftarget=hg[chrom][pamstart:pamstart+gRNAsize]
+                                    alttarget=reftarget[:(rpclosest-1)]+alt+reftarget[rpclosest:]
+                                else:
+                                    pamstart=int(pos)-1+rpclosest
+                                    reftarget=revcomp(hg[chrom][pamstart-gRNAsize:pamstart])
+                                    alttarget=reftarget[:(rpclosest-1)]+revcomp(alt)+reftarget[rpclosest:]
 
-
-                        rpclosest=100
-                        for pam in posPAM:
-                            p=downstream.find(pam)
-                            if p!=-1:
-                                rp=w-pamsize-p
-                                if rp<rpclosest:
-                                    strandorientation='+'
-                                    rpclosest=rp
-                                    pamstart=int(pos)-rpclosest-4
-                                    reftarget=hg[chrom_nochr][pamstart:pamstart+25]
-                                    alttarget=reftarget[:4+(rpclosest-1)]+alt+reftarget[4+rpclosest:]
-                                    
-                                #print(n,chrom,gene,af,ref,alt,pos,"is targetable with CAS12 through PAM site: %s at position +%d!"%(pam,w-pamsize-p),downstream,r,upstream)
+                                # print(n,chrom,ref,alt,pos,"is targetable with CAS12 through PAM site: %s at position +%d!"%(pamclosest,rpclosest-len(pamclosest)),downstream,r,upstream,region)
                         
-                        for pam in negPAM:
-                            p=upstream.find(pam)
-                            if p!=-1:
-                                rp=p+1
-                                if rp<rpclosest:
-                                    strandorientation='-'
-                                    rpclosest=rp
-                                    pamstart=int(pos)-1+rpclosest+4
-                                    reftarget=revcomp(hg[chrom_nochr][pamstart-25:pamstart])
-                                    alttarget=reftarget[:4+(rpclosest-1)]+revcomp(alt)+reftarget[4+rpclosest:]
-                                
-                                #print(n,chrom,gene,af,ref,alt,pos,"is targetable with CAS12 through PAM site: %s at position +%d!"%(pam,p+1),downstream,r,upstream)
-                        
-                        rec.info['SNP_position']='PAM+%d'%rpclosest
+                        rec.info['SNP_position']='PAM+%d'%(rpclosest-len(pamclosest))
                         rec.info['CRISPR_ref_target_sequence']=reftarget.upper()
                         rec.info['CRISPR_alt_target_sequence']=alttarget.upper()
-                        rec.info['STRAND']=strandorientation
+                        rec.info['STRAND']=orientation
                         
                         vcfwriter.write(rec)
                         n+=1

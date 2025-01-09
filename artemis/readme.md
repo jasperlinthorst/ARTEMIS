@@ -1,6 +1,6 @@
 # Artemis
 
-Artemis is a simple bioinformatics pipeline designed to scan a reference genome for PAM sites and intersect the corresponding seed region with a VCF file to annotate the intersecting variants with a CRISPR-Cas12.
+Artemis is a simple bioinformatics pipeline which scans a reference genome for PAM sites, to then annotate intersecting variants in a VCF file with sequence information for gRNA design.
 
 Steps:
 - Load and process genome files (supports gzipped files)
@@ -69,30 +69,36 @@ NOTE, make sure vcf and reference genomes use the same version and contig annota
 ## Example
 
 ```sh
-artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz clinvar.vcf.gz > clinvar.cas12.annotated.vcf
+artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz clinvar.vcf.gz > clinvar.cas12a.annotated.vcf
 ```
 
 NOTE, the above will intersect all ~60 million PAM sites in the human genome with all variants in clinvar and thus wil take long to run and uses large amounts of memory. Better to subset the data, which can be done from the commandline directly. If the reference is bgzipped and indexed using samtools, and vcf files are index using bcftools, we can intersect PAMs on chromosome 22 with pathogenic SNVs on chromosome 22 in clinvar like this:
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) -o clinvar.cas12.chr22.pathogenic.snv.vcf
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) -o clinvar.cas12a.chr22.pathogenic.snv.vcf
 ```
 
 To exclude PAM sites that are potentially interrupted by common variants:
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --excl <(bcftools view -i 'INFO/AF>=0.01 & INFO/AF<=0.99' ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz chr22 | sed -s 's/chr//1') -o clinvar.cas12.chr22.pathogenic.snv.excl1kg.maf1p.vcf
+artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --excl <(bcftools view -i 'INFO/AF>=0.01 & INFO/AF<=0.99' ALL.wgs.shapeit2_integrated_v1a.GRCh38.20181129.sites.vcf.gz chr22 | sed -s 's/chr//1') -o clinvar.cas12a.chr22.pathogenic.snv.excl1kg.maf1p.vcf
 ```
 
-To use different seed size definitions and match PAMs for other CAS proteins use --seedsize and --pamregex arguments. E.g to screen for CAS9 with a seed size definition
+To use different seed size definitions and match PAMs for other Cas proteins use --seedsize and --pamregex arguments. E.g to scan for variants in the human genome that are within 8bp of a SpCas9 PAM:
 
 ```sh
-artemis <(samtools faidx Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz 22) <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 8 --pamregex "(?=([ACT]GG))|(?=(CC[AGT]))" -o clinvar.cas9.chr22.pathogenic.snv.vcf
+artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 8 --pamregex "(?=([ATCG]GG))|(?=(CC[ATCG]))" -o clinvar.cas9.chr22.pathogenic.snv.vcf
 
 ```
 
+or for Cas12b
 
-The resulting vcf file can be imported into genome browsers like IGV, contains all CAS12 targetable variants and the following additional annotations with respect to CRISPR gRNA spacer sequence and the nearest PAM site:
+```sh
+artemis Homo_sapiens.GRCh38.dna_sm.primary_assembly.fa.gz <(bcftools view clinvar.vcf.gz -i 'INFO/CLNSIG = "Pathogenic" && CLNVC="single_nucleotide_variant"' 22) --seedsize 6 --pamregex "(?=(TT[CT]))|(?=([GA]AA))" -o clinvar.cas12b.chr22.pathogenic.snv.vcf
+
+```
+
+The resulting vcf file can be imported into genome browsers like IGV, contains all targetable variants and the following additional annotations with respect to CRISPR gRNA spacer sequence and the nearest PAM site:
 
 - SNP_position: Position of SNP relative to PAM site
 - CRISPR_ref_target_sequence: CRISPR target sequence to address the reference (WT) allele
