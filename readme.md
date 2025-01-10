@@ -10,6 +10,8 @@ Steps:
 - Intersect seed regions with the input VCF file (e.g. clinvar)
 - Annotate variants with CRISPR target sequences in vcf format
 
+For more information and citations: https://doi.org/10.1016/j.crmeth.2024.100912 
+
 # Dependencies
 
 - bedtools

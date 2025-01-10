@@ -39,8 +39,11 @@ def loadhg(args):
 
                 seq=""
             else:
-                seq+=line#.upper() #consider uppercasing the genome to include pams in softmasked regions...
-
+                if args.nomask:
+                    seq+=line.upper()
+                else:
+                    seq+=line
+    
     if seq!="":
         hg[ctgname]=seq
         nseq+=len(seq)
@@ -64,27 +67,19 @@ def intersect_seeds_with_vcf(args):
             o='-' if m.groups()[0]==None else '+'
             start=m.start()
             end=m.start() + len(m.group(1)) if m.group(1)!=None else m.start()+len(m.group(2))
-            
-            # print(chrom,start,end,hg[chrom][start:end])
-            # print(m.groups(), start, end)
-            
-            # if o=='+':
-            #     assert(hg[chrom][start:end] in ["TTTC", "TTTA", "TTTG"])
-            # else:
-            #     assert(hg[chrom][start:end] in ["CAAA", "TAAA", "GAAA"])
-            
+                        
             pamsites.append((chrom, start, end, o))
     
     logging.info(f"done ({len(pamsites)} pamsites).\n")
 
     pams = BedTool(pamsites)
-    pams.saveas("allpamsites.bed")
+    # pams.saveas("allpamsites.bed")
 
     if args.kg!=None:
         logging.info("Intersecting PAM sites with exclusion vcf... ")
         kg=BedTool(open(args.kg.name).read(),from_string=True)
         pams = pams.intersect(kg,  wa=True, wb=False, v=True)
-        pams.saveas("filtpamsites.bed")
+        # pams.saveas("filtpamsites.bed")
         logging.info("done.\n")
     
     logging.info("Sorting and merging %d PAM associated seed sites... "%len(pams))
@@ -210,7 +205,8 @@ def main():
     parser.add_argument("-o", dest="outputfile", type=argparse.FileType('w'), help="Where to write annotated output vcf file (default: stdout)", required=False, default=None)
     parser.add_argument("--seedsize", type=int, default=5, help="Specify the size of the seed region")
     parser.add_argument("--pamregex", type=str, default='(?=(TTT[ACG]))|(?=([CGT]AAA))', help="Regular expression to search for PAM sites in the genome, default for CAS12a: first group should match forward strand, second group the reverse complement")
-    
+    parser.add_argument("--nomask", dest="nomask", type=bool, default=False, help="Do not ignore softmasked parts of the reference genome (make reference uppercase)", required=False)
+
     args = parser.parse_args()
 
     loadhg(args)
