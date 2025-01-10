@@ -205,8 +205,7 @@ def main():
     parser.add_argument("-o", dest="outputfile", type=argparse.FileType('w'), help="Where to write annotated output vcf file (default: stdout)", required=False, default=None)
     parser.add_argument("--seedsize", type=int, default=5, help="Specify the size of the seed region")
     parser.add_argument("--pamregex", type=str, default='(?=(TTT[ACG]))|(?=([CGT]AAA))', help="Regular expression to search for PAM sites in the genome, default for CAS12a: first group should match forward strand, second group the reverse complement")
-    parser.add_argument("--nomask", dest="nomask", type=bool, default=False, help="Do not ignore softmasked parts of the reference genome (make reference uppercase)", required=False)
-
+    parser.add_argument("--nomask", action="store_true", default=False, help="Do not ignore softmasked parts of the reference genome (make reference uppercase)")
     args = parser.parse_args()
 
     loadhg(args)
